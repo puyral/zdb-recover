@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import subprocess
+import sys
 
 def pathParse(path, dataset=None):
     if dataset == None:
@@ -29,7 +30,7 @@ def pathParse(path, dataset=None):
 
 def getObjBlkPointers(args):
     path = pathParse(
-        args.input_file)
+        args.input_file, dataset=args.dataset)
     
     if args.debug:
         print(f'\n[debug] parsed path is\n{path}\n')
@@ -119,6 +120,35 @@ def getObjBlkPointers(args):
     
     return LX_POINTERS, path['mntPoint'], tsize
 
+# thank you chatgpt ^^'
+def get_mount_point(dataset):
+    """
+    Get the mount point of a ZFS dataset.
+
+    :param dataset: Name of the ZFS dataset.
+    :return: Mount point as a string, or None if the dataset is not mounted.
+    """
+    try:
+        # Execute the `zfs get` command to retrieve the mount point.
+        result = subprocess.run(
+            ["zfs", "get", "-H", "-o", "value", "mountpoint", dataset],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        mount_point = result.stdout.strip()
+        
+        # Check if the dataset is explicitly not mounted.
+        if mount_point in ["-", "legacy"]:
+            return None
+
+        return mount_point
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to get mount point for dataset '{dataset}'.", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        return None
+
 def main(args):
     # zdb -U /data/zfs/zpool.cache -R Boys 0:156ecb3f5000:20000L/8000P:rd > /mnt/Boys/audrey/testing/browserhist_l0_0_raw1_2.txt
     # python /mnt/Boys/audrey/testing/zdb_recover.py -i "/mnt/Boys/audrey/2022.09.15 centbrowser history" -o "/mnt/Boys/audrey/testing/dump.bin"
@@ -131,9 +161,19 @@ def main(args):
         raise Exception(f'Specified output file {args.output_file} already exists!')
     if outfileExists and args.debug:
         print('\n[debug] overwriting output file\n')
-    
+
+    # find the input file
+    in_file = args.input_file
+    if args.dataset != None:
+        mount_point = get_mount_point(args.dataset)
+        assert (mount_point != None), f"can't find mount point of {args.dataset}, is it mounted?"
+        in_file = os.path.join(mount_point, in_file)
+        if args.debug:
+            print(f"\n[debug] input file path is {in_file}")
+    assert os.path.isfile(in_file), f"the input file ({in_file}) does not exists!"
+
     with open(args.output_file, 'wb') as OF:
-        with open(args.input_file, 'rb') as IF:
+        with open(in_file, 'rb') as IF:
             previousOffset=None
             i=1
             byteCounter=0
@@ -202,7 +242,7 @@ if __name__=='__main__':
     parser.add_argument('-X', '--overwrite', action='store_true', help='overwrite output file if exists')
     parser.add_argument('-t', '--truenas', action='store_true', help='use this flag if your ZFS install is on Truenas')
     parser.add_argument('--debug', action='store_true', help='use this flag to print debug informations')
-    parser.add_argument('--dataset', action='store_true', default=None, help='the data set the file is in. (if provided, the input file must be relative to the root of the dataset)')
+    parser.add_argument('--dataset', default=None, help='the data set the file is in. (if provided, the input file must be relative to the root of the dataset)')
     
     args = parser.parse_args()
     
