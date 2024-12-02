@@ -3,21 +3,29 @@ import os
 import re
 import subprocess
 
-def pathParse(path):
-    # match /mnt/{mountpoint}/
-    mntPoint = path.split('/mnt/')[1].split('/')[0]
-    if not mntPoint:
-        raise Exception('Unable to extract mountpoint')
-    
-    # match /mnt/{mountpoint/{relative path}
-    relPath = path.split(f'/mnt/{mntPoint}/')[1]
-    if not relPath:
-        raise Exception('Unable to extract mountpoint\'s relative path')
-    
-    return {
-        'abslPath': path, 'relPath': relPath, # relative to the mountpoint
-        'mntPoint': mntPoint, 'filename': os.path.split(path)[1]
-    }
+def pathParse(path, dataset=None):
+    if dataset == None:
+        # match /mnt/{mountpoint}/
+        mntPoint = path.split('/mnt/')[1].split('/')[0]
+        if not mntPoint:
+            raise Exception('Unable to extract mountpoint')
+        
+        # match /mnt/{mountpoint/{relative path}
+        relPath = path.split(f'/mnt/{mntPoint}/')[1]
+        if not relPath:
+            raise Exception('Unable to extract mountpoint\'s relative path')
+        
+        return {
+            # 'abslPath': path,  never used
+            'relPath': relPath, # relative to the mountpoint
+            'mntPoint': mntPoint, 'filename': os.path.split(path)[1]
+        }
+    else:
+        return {
+            # 'abslPath': path,  never used
+            'relPath': path, # relative to the mountpoint
+            'mntPoint': dataset, 'filename': os.path.split(path)[1]
+        }
 
 def getObjBlkPointers(args):
     path = pathParse(
@@ -189,11 +197,12 @@ def main(args):
 if __name__=='__main__':
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input-file', default=None, help='input file to read')
+    parser.add_argument('-i', '--input-file', default=None, help="input file to read (assumes it is of the form '\\mnt\\{dataset}\\..' unless '--dataset' is set)")
     parser.add_argument('-o', '--output-file', default=None, help='output file to write')
     parser.add_argument('-X', '--overwrite', action='store_true', help='overwrite output file if exists')
     parser.add_argument('-t', '--truenas', action='store_true', help='use this flag if your ZFS install is on Truenas')
     parser.add_argument('--debug', action='store_true', help='use this flag to print debug informations')
+    parser.add_argument('--dataset', action='store_true', default=None, help='the data set the file is in. (if provided, the input file must be relative to the root of the dataset)')
     
     args = parser.parse_args()
     
